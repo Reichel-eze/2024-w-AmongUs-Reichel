@@ -3,7 +3,7 @@ class Jugador {
   const mochila = []              // una mochila que inicia vacía
   const tareasARealizar = []
   var property nivelDeSospecha = 40    // comienza en 40
-  var puedeVotar = true
+  var property puedeVotar = true       // en un comienzo puede votar 
   var property estaVivo = true         // en un comienzo esta vivo
 
   //method nivelDeSospecha() = nivelDeSospechaBase
@@ -49,9 +49,7 @@ class Jugador {
     nave.llamarAUnaReunionDeEmergencia()
   }
 
-  method expulsar() {
-    estaVivo = false
-  }
+  method expulsar() {}  // metodo abstracto
 
 }
 
@@ -82,7 +80,19 @@ class Tripulante inherits Jugador {
 
   override method completoTodasSusTareas() = tareasARealizar.isEmpty() // si la lista de tareas esta vacia significa que hizo todas sus tareas
 
-  method voto() = personalidad.votoSegunPersonalidad()
+  method voto() = 
+    if(puedeVotar) personalidad.votoSegunPersonalidad()
+    else self.votarEnBlanco()
+
+  method votarEnBlanco() {
+    puedeVotar = true // le cambio el estado para el proximo turno
+    return votoEnBlanco // EL CASO!!
+  }
+
+  override method expulsar() {
+    estaVivo = false      // ya no cuenta para la votacion
+    nave.expulsarTripulante()
+  }
 
 }
 
@@ -96,8 +106,12 @@ class Impostor inherits Jugador {
     self.aumentarNivelDeSospechaEn(5)
   }
 
-  method voto() = nave.cualquierJugadorVivo()
+  method voto() = if(puedeVotar) nave.cualquierJugadorVivo()
 
+  override method expulsar() {
+    estaVivo = false    // ya no cuenta para la votacion
+    nave.expulsarImpostor()
+  }
 }
 
 // TAREAS
@@ -144,8 +158,8 @@ object ventilarLaNave inherits Tarea (itemsNecesarios = []) {
 object nave {
   var nivelDeOxigeno = 200
   const jugadores = []
-  //const impostores = []
-  //const tripulantes = []
+  var cantImpostores = 0
+  var cantTripulantes = 0
   
 
   method aumentarNivelDeOxigenoEn(cantidad) {
@@ -158,13 +172,17 @@ object nave {
   }
 
   method validarVictoriaDeLosImpostores() {
-    if(nivelDeOxigeno <= 0) 
+    if(nivelDeOxigeno <= 0 or cantTripulantes == cantImpostores) 
       throw new DomainException(message = "Ganaron los impostores!!")
   }
  
-  method seCompletoLaTarea() {
-    if(self.seCompletaronTodasLasTareas())
+  method validarVictoriaDeLosTripulantes() {
+    if(self.seCompletaronTodasLasTareas() or cantImpostores == 0)
       throw new DomainException(message = "Ganaron los tripulantes!!")
+  }
+
+  method seCompletoLaTarea() {
+    self.validarVictoriaDeLosTripulantes()
   }
 
   method seCompletaronTodasLasTareas() = jugadores.all({jugador => jugador.completoTodasSusTareas()})
@@ -183,11 +201,22 @@ object nave {
 
   method jugadoresVivos() = jugadores.filter({jugador => jugador.estaVivo()})
 
-  method alguienQueNoSeaSospechoso() = jugadores.filter({jugador => !jugador.esSospechoso()}).anyOne()
+  method alguienQueNoSeaSospechoso() = self.jugadoresVivos().findOrDefault({jugador => !jugador.esSospechoso()}, votoEnBlanco)
 
-  method jugadorConMayorNivelDeSospecha() = jugadores.max({jugador => jugador.nivelDeSospecha()})
+  method jugadorConMayorNivelDeSospecha() = self.jugadoresVivos().max({jugador => jugador.nivelDeSospecha()})
 
-  method alguienQueTengaLaMochilaVacia() = jugadores.filter({jugador => jugador.mochilaVacia()}).anyOne()
+  method alguienQueTengaLaMochilaVacia() = self.jugadoresVivos().findOrDefault({jugador => jugador.mochilaVacia()}, votoEnBlanco)
+
+  method expulsarTripulante(){
+    cantTripulantes -= 1
+    self.validarVictoriaDeLosImpostores()
+  }
+
+  method expulsarImpostor() {
+    cantImpostores -= 1
+    self.validarVictoriaDeLosTripulantes()
+  }
+  
 
 }
 
@@ -220,4 +249,10 @@ object detective {
 
 object materialista {
   method votoSegunPersonalidad() = nave.alguienQueTengaLaMochilaVacia()
+}
+
+object votoEnBlanco {
+  method expulsar() {
+    // No hace nada porque estoy expulsando al voto en blanco
+  }
 }
